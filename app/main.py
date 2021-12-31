@@ -26,8 +26,6 @@ def get_posts():
 @app.get('/posts/{id}')
 def get_post(id: UUID4):
     post = db.execute("""SELECT * from posts WHERE id=%s""", (str(id), ))
-    print(post)
-    print(type(post))
     if not post:
         raise HTTPException(status_code=404,
                             detail=f"Post with id={id} not found.")
@@ -71,8 +69,6 @@ def delete_post(id: UUID4):
         RETURNING *
     """, (str(id), ))
 
-    print(deleted_post)
-    print(type(deleted_post))
     if not deleted_post:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
