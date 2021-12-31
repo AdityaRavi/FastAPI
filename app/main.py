@@ -1,20 +1,15 @@
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel
+from pydantic.types import UUID4
+from app.db import DB
 
 app = FastAPI()
-posts = []  #store locally for now
+db = DB()
 
 
 class Post(BaseModel):
     title: str
     content: str
-
-
-def find_post_by_id(id: int):
-    for idx, post in enumerate(posts):
-        if post['id'] == id:
-            return post, idx
-    return (None, None)
 
 
 @app.get('/')
@@ -24,14 +19,15 @@ def root():
 
 @app.get('/posts')
 def get_posts():
-    return {"data": posts}
+    results = db.execute("""SELECT * FROM posts""")
+    return {"data": results}
 
 
 @app.get('/posts/{id}')
-def get_post(id: int):
-    print(id)
-    (post, _) = find_post_by_id(id)
-
+def get_post(id: UUID4):
+    post = db.execute("""SELECT * from posts WHERE id=%s""", (str(id), ))
+    print(post)
+    print(type(post))
     if not post:
         raise HTTPException(status_code=404,
                             detail=f"Post with id={id} not found.")
@@ -39,42 +35,50 @@ def get_post(id: int):
     return {"data": post}
 
 
-@app.post('/posts/{id}', status_code=status.HTTP_201_CREATED)
-def create_post(id: int, post: Post):
-    (existing_post, _) = find_post_by_id(id)
-    if existing_post:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Create failed. Post with id={id} already exists.")
+@app.post('/posts', status_code=status.HTTP_201_CREATED)
+def create_post(post: Post):
+    post = db.execute(
+        """INSERT INTO posts (title, content) VALUES (%s, %s) RETURNING *""",
+        (post.title, post.content))
 
-    new_post = dict(post.dict(), id=id)
-    posts.append(new_post)
-
-    return {"detail": f"Success! Post with id={id} was successfully created."}
+    return {"detail": post}
 
 
 @app.put('/posts/{id}', status_code=status.HTTP_205_RESET_CONTENT)
-def update_post(id: int, updated_post: Post):
-    (existing_post, existing_post_idx) = find_post_by_id(id)
+def update_post(id: UUID4, updated_post_content: Post):
+    updated_post = db.execute(
+        """
+        UPDATE posts
+        SET title=%s, content=%s
+        WHERE id=%s
+        RETURNING *
+    """, (updated_post_content.title, updated_post_content.content, str(id)))
 
-    if not existing_post:
+    if not updated_post:
         raise HTTPException(
             status_code=404,
             detail=f"Update failed. Post with id={id} does not exist.")
 
-    posts[existing_post_idx] = dict(updated_post.dict(), id=id)
-
-    return {"detail": f"Success! Post with id={id} was updated."}
+    return {"detail": updated_post}
 
 
 @app.delete('/posts/{id}')
-def delete_post(id: int):
-    (post, idx) = find_post_by_id(id)
+def delete_post(id: UUID4):
+    deleted_post = db.execute(
+        """
+        DELETE FROM posts
+        WHERE id=%s
+        RETURNING *
+    """, (str(id), ))
 
-    if not post:
+    print(deleted_post)
+    print(type(deleted_post))
+    if not deleted_post:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Delete failed. Post with id={id} does not exist.")
 
-    posts.pop(idx)
-    return {"detail": f"Success! Post with id={id} was deleted."}
+    return {
+        "detail": f"Success! Post with id={id} was deleted.",
+        "data": deleted_post
+    }
