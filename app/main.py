@@ -2,79 +2,98 @@ from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel
 from pydantic.types import UUID4
 from app.db import DB
+from time import sleep
 
-app = FastAPI()
-db = DB()
-
+db_connection_params = dict(
+    database='social_media',
+    host = 'localhost',
+    port = 5432,
+    user = 'postgres',
+    password = 'postgres'
+)
 
 class Post(BaseModel):
     title: str
     content: str
 
+def start_api():
+    app = FastAPI()
+    db = DB(**db_connection_params)
 
-@app.get('/')
-def root():
-    return {"message": "Hello World!"}
+    @app.on_event('startup')
+    def setup():
+        db.connect_pool()
 
+    @app.on_event('shutdown')
+    def shutdown():
+        db.close_pool()
 
-@app.get('/posts')
-def get_posts():
-    results = db.execute("""SELECT * FROM posts""")
-    return {"data": results}
-
-
-@app.get('/posts/{id}')
-def get_post(id: UUID4):
-    post = db.execute("""SELECT * from posts WHERE id=%s""", (str(id), ))
-    if not post:
-        raise HTTPException(status_code=404,
-                            detail=f"Post with id={id} not found.")
-
-    return {"data": post}
+    @app.get('/')
+    def root():
+        return {"message": "Hello World!"}
 
 
-@app.post('/posts', status_code=status.HTTP_201_CREATED)
-def create_post(post: Post):
-    post = db.execute(
-        """INSERT INTO posts (title, content) VALUES (%s, %s) RETURNING *""",
-        (post.title, post.content))
-
-    return {"detail": post}
+    @app.get('/posts')
+    def get_posts():
+        results = db.execute("""SELECT pg_sleep(2.5), title FROM posts""")
+        return {"data": results}
 
 
-@app.put('/posts/{id}', status_code=status.HTTP_205_RESET_CONTENT)
-def update_post(id: UUID4, updated_post_content: Post):
-    updated_post = db.execute(
-        """
-        UPDATE posts
-        SET title=%s, content=%s
-        WHERE id=%s
-        RETURNING *
-    """, (updated_post_content.title, updated_post_content.content, str(id)))
+    @app.get('/posts/{id}')
+    def get_post(id: UUID4):
+        post = db.execute("""SELECT * from posts WHERE id=%s""", (str(id), ))
+        if not post:
+            raise HTTPException(status_code=404,
+                                detail=f"Post with id={id} not found.")
 
-    if not updated_post:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Update failed. Post with id={id} does not exist.")
-
-    return {"detail": updated_post}
+        return {"data": post}
 
 
-@app.delete('/posts/{id}')
-def delete_post(id: UUID4):
-    deleted_post = db.execute(
-        """
-        DELETE FROM posts
-        WHERE id=%s
-        RETURNING *
-    """, (str(id), ))
+    @app.post('/posts', status_code=status.HTTP_201_CREATED)
+    def create_post(post: Post):
+        post = db.execute(
+            """INSERT INTO posts (title, content) VALUES (%s, %s) RETURNING *""",
+            (post.title, post.content))
 
-    if not deleted_post:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Delete failed. Post with id={id} does not exist.")
+        return {"detail": post}
 
-    return {
-        "detail": f"Success! Post with id={id} was deleted.",
-        "data": deleted_post
-    }
+
+    @app.put('/posts/{id}', status_code=status.HTTP_205_RESET_CONTENT)
+    def update_post(id: UUID4, updated_post_content: Post):
+        updated_post = db.execute(
+            """
+            UPDATE posts
+            SET title=%s, content=%s
+            WHERE id=%s
+            RETURNING *
+        """, (updated_post_content.title, updated_post_content.content, str(id)))
+
+        if not updated_post:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Update failed. Post with id={id} does not exist.")
+
+        return {"detail": updated_post}
+
+
+    @app.delete('/posts/{id}')
+    def delete_post(id: UUID4):
+        deleted_post = db.execute(
+            """
+            DELETE FROM posts
+            WHERE id=%s
+            RETURNING *
+        """, (str(id), ))
+
+        if not deleted_post:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Delete failed. Post with id={id} does not exist.")
+
+        return {
+            "detail": f"Success! Post with id={id} was deleted.",
+            "data": deleted_post
+        }
+    return app
+
+app = start_api()
