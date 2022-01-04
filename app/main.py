@@ -2,7 +2,6 @@ from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel
 from pydantic.types import UUID4
 from app.db import DB
-from time import sleep
 
 db_connection_params = dict(
     database='social_media',
@@ -18,7 +17,7 @@ class Post(BaseModel):
 
 def start_api():
     app = FastAPI()
-    db = DB(**db_connection_params)
+    db = DB(**db_connection_params) # is this the best way to access the db? Should it be passed as part of the resp?
 
     @app.on_event('startup')
     def setup():
@@ -35,8 +34,10 @@ def start_api():
 
     @app.get('/posts')
     def get_posts():
-        results = db.execute("""SELECT pg_sleep(2.5), title FROM posts""")
-        return {"data": results}
+        # results = db.execute("""SELECT pg_sleep(2.5), title FROM posts""")
+        results = db.execute("""SELECT * FROM posts""") # very bad
+
+        return {"rows": results}
 
 
     @app.get('/posts/{id}')
@@ -46,7 +47,7 @@ def start_api():
             raise HTTPException(status_code=404,
                                 detail=f"Post with id={id} not found.")
 
-        return {"data": post}
+        return {"rows": post}
 
 
     @app.post('/posts', status_code=status.HTTP_201_CREATED)
@@ -55,7 +56,7 @@ def start_api():
             """INSERT INTO posts (title, content) VALUES (%s, %s) RETURNING *""",
             (post.title, post.content))
 
-        return {"detail": post}
+        return {"rows": post}
 
 
     @app.put('/posts/{id}', status_code=status.HTTP_205_RESET_CONTENT)
@@ -73,7 +74,7 @@ def start_api():
                 status_code=404,
                 detail=f"Update failed. Post with id={id} does not exist.")
 
-        return {"detail": updated_post}
+        return {"rows": updated_post}
 
 
     @app.delete('/posts/{id}')
@@ -91,8 +92,7 @@ def start_api():
                 detail=f"Delete failed. Post with id={id} does not exist.")
 
         return {
-            "detail": f"Success! Post with id={id} was deleted.",
-            "data": deleted_post
+            "rows": deleted_post
         }
     return app
 
