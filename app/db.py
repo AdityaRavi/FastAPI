@@ -6,6 +6,15 @@ from contextlib import contextmanager
 # Improve pool implementation: min conns, max conns, max conns allowed by postgres, prune conns, etc.
 # Native pool of psycopg2
 # Asyncpg
+
+db_connection_params = dict(
+    database='social_media',
+    host = 'localhost',
+    port = 5432,
+    user = 'postgres',
+    password = 'postgres'
+)
+
 class Connection:
     def __init__(self, id, **con_args):
         self.id = id
@@ -76,3 +85,8 @@ class DB:
             conn.commit() # should this be done everytime? If so, use auto commit?
 
         return result
+    
+    def get_db(self):
+        return self
+
+db = DB(**db_connection_params)
